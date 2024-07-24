@@ -13,6 +13,7 @@ int main(int argc, char *argv[])
   if (!client.Connect(argv[1], atoi(argv[2])))
   {
     std::perror("connect error");
+    return -1;
   }
   std::cout << "connected\n";
   std::string message;
@@ -27,10 +28,12 @@ int main(int argc, char *argv[])
     if (!client.Send(message))
     {
       std::perror("send error");
+      break;
     }
     if (!client.Receive(message, 1024))
     {
       std::perror("receive error");
+      break;
     }
     std::cout << "receive from server: " << message << std::endl;
   }

@@ -20,7 +20,6 @@ bool Server::Init(const unsigned short port)
         return false;
     if ((m_server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
-        std::perror("socket");
         return false;
     }
     m_port = port;

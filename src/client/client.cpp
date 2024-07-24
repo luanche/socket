@@ -15,7 +15,6 @@ bool Client::Connect(const std::string &ip, const unsigned short port)
     return false;
   if ((m_client_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
   {
-    std::perror("socket");
     return false;
   }
   m_ip = ip;
@@ -28,7 +27,6 @@ bool Client::Connect(const std::string &ip, const unsigned short port)
   struct hostent *host;
   if ((host = gethostbyname(m_ip.c_str())) == nullptr)
   {
-    std::perror("gethostbyname");
     Close();
     return false;
   }
@@ -37,7 +35,6 @@ bool Client::Connect(const std::string &ip, const unsigned short port)
 
   if (connect(m_client_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
   {
-    std::perror("connect");
     Close();
     return false;
   }
@@ -50,7 +47,6 @@ bool Client::Send(const std::string &message)
     return false;
   if (send(m_client_fd, message.data(), message.size(), 0) <= 0)
   {
-    std::perror("send");
     return false;
   }
   return true;

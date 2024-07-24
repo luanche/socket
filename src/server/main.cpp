@@ -1,4 +1,5 @@
 #include <iostream>
+#include <algorithm>
 #include "server.h"
 
 int main(int argc, char *argv[])
@@ -31,9 +32,7 @@ int main(int argc, char *argv[])
     }
     std::cout << "received from client: " << message << std::endl;
 
-    std::cout << "send to client: ";
-    std::getline(std::cin, message);
-    if (!server.Send(message))
+    if (!server.Send("Client say:" + message))
     {
       std::perror("send error");
       break;
