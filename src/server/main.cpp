@@ -1,5 +1,6 @@
 #include <iostream>
 #include <algorithm>
+#include <cctype>
 #include "server.h"
 
 int main(int argc, char *argv[])
@@ -15,29 +16,22 @@ int main(int argc, char *argv[])
     std::perror("init error");
     return -1;
   }
-  std::cout << "server on: " << argv[1] << std::endl;
-  if (!server.Accept())
-  {
-    std::perror("accept error");
-    return -1;
-  }
-  std::cout << "client connected: " << server.GetClientIP() << std::endl;
-  std::string message;
-  while (1)
-  {
-    if (!server.Receive(message, 1024))
-    {
-      std::perror("receive error");
-      break;
-    }
-    std::cout << "received from client: " << message << std::endl;
 
-    if (!server.Send("Client say:" + message))
-    {
-      std::perror("send error");
-      break;
-    }
-  }
+  server.Bind(EventType::OnConnect, [](const int &fd, std::string &ip)
+              { std::cout << "client connected " << fd << ": " << ip << std::endl; });
+
+  server.Bind(EventType::OnClose, [](const int &fd, std::string &message)
+              { std::cout << "client disconnected " << fd << ": " << message << std::endl; });
+
+  server.Bind(EventType::OnMessage, [&server](const int &fd, std::string &message)
+              {
+                std::cout << "received from client " << fd << ": " << message << std::endl;
+                std::transform(message.begin(), message.end(), message.begin(), toupper);
+                server.Send(fd, message);
+                std::cout << "send to client " << fd << ": " << message << std::endl; });
+
+  server.Start(IOType::Select);
+
   server.Close();
   return 0;
 }

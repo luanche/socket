@@ -9,16 +9,73 @@
 #include <arpa/inet.h>
 #include "server.h"
 
-std::string &Server::GetClientIP()
+#define MESSAGE_MAX_LENGTH 1024
+
+bool Server::_StartSelect()
 {
-    return m_client_ip;
+    int max_fd = m_lfd;
+    fd_set read_set;
+    fd_set temp_set;
+    FD_ZERO(&read_set);
+    FD_SET(m_lfd, &read_set);
+    std::string message;
+    while (1)
+    {
+        temp_set = read_set;
+        int num = select(max_fd + 1, &temp_set, NULL, NULL, NULL);
+        if (FD_ISSET(m_lfd, &temp_set))
+        {
+            struct sockaddr_in addr;
+            socklen_t length = sizeof(addr);
+            int client_fd = accept(m_lfd, (struct sockaddr *)&addr, &length);
+            FD_SET(client_fd, &read_set);
+            message = inet_ntoa(addr.sin_addr);
+            if (client_fd > max_fd)
+            {
+                max_fd = client_fd;
+            }
+            if (onConnect)
+            {
+                onConnect(client_fd, message);
+            }
+        }
+        for (int fd = 0; fd <= max_fd; fd++)
+        {
+            if (fd != m_lfd && FD_ISSET(fd, &temp_set))
+            {
+                message.clear();
+                message.resize(MESSAGE_MAX_LENGTH);
+                int size = recv(fd, &message[0], message.size(), 0);
+                if (size == 0)
+                {
+                    FD_CLR(fd, &read_set);
+                    close(fd);
+                    if (onClose)
+                    {
+                        onClose(fd, message);
+                    }
+                }
+                else if (size > 0)
+                {
+                    if (onMessage)
+                    {
+                        onMessage(fd, message);
+                    }
+                }
+                else
+                {
+                    perror("recv");
+                }
+            }
+        }
+    }
 }
 
 bool Server::Init(const unsigned short port)
 {
-    if (m_server_fd != -1)
+    if (m_lfd != -1)
         return false;
-    if ((m_server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    if ((m_lfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
         return false;
     }
@@ -29,79 +86,70 @@ bool Server::Init(const unsigned short port)
     addr.sin_port = htons(m_port);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    if (bind(m_server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+    int opt = 1;
+    if (setsockopt(m_lfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
     {
-        CloseServer();
+        Close();
         return false;
     }
-    if (listen(m_server_fd, 10) < 0)
+
+    if (bind(m_lfd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
     {
-        CloseServer();
+        Close();
+        return false;
+    }
+    if (listen(m_lfd, 10) < 0)
+    {
+        Close();
         return false;
     }
     return true;
 }
 
-bool Server::Accept()
+bool Server::Bind(const EventType &event, CallbackType function)
 {
-    struct sockaddr_in addr;
-    socklen_t addrlen = sizeof(addr);
-    if ((m_client_fd = accept(m_server_fd, (struct sockaddr *)&addr, &addrlen)) < 0)
+    switch (event)
     {
+    case EventType::OnConnect:
+        onConnect = function;
+        return true;
+    case EventType::OnMessage:
+        onMessage = function;
+        return true;
+    case EventType::OnClose:
+        onClose = function;
+        return true;
+    default:
         return false;
     }
-    m_client_ip = inet_ntoa(addr.sin_addr);
-    return true;
 }
 
-bool Server::Send(const std::string &message)
+bool Server::Start(const IOType &type)
 {
-    if (m_client_fd == -1)
-        return false;
-    if (send(m_client_fd, message.data(), message.size(), 0) <= 0)
-        return false;
-    return true;
-}
-
-bool Server::Receive(std::string &message, size_t max_length)
-{
-    if (m_client_fd == -1)
+    switch (type)
     {
+    case IOType::Select:
+        _StartSelect();
+        return true;
+    default:
         return false;
     }
-    message.clear();
-    message.resize(max_length);
+}
 
-    int size = recv(m_client_fd, &message[0], message.size(), 0);
-    if (size <= 0)
-    {
-        message.clear();
+bool Server::Send(const int &fd, const std::string &message)
+{
+    if (fd == -1)
         return false;
-    }
-    message.resize(size);
+    if (send(fd, message.data(), message.size(), 0) <= 0)
+        return false;
     return true;
 }
 
-void Server::Close()
+bool Server::Close()
 {
-    CloseServer();
-    CloseClient();
-}
-
-bool Server::CloseServer()
-{
-    if (m_server_fd == -1)
+    if (m_lfd == -1)
         return false;
-    close(m_server_fd);
-    m_server_fd = -1;
-    return true;
-}
-
-bool Server::CloseClient()
-{
-    if (m_client_fd == -1)
-        return false;
-    close(m_client_fd);
-    m_client_fd = -1;
+    close(m_lfd);
+    m_lfd = -1;
     return true;
 }
