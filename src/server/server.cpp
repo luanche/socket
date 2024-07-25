@@ -79,12 +79,6 @@ bool Server::Init(const unsigned short port)
     {
         return false;
     }
-    m_port = port;
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(m_port);
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     int opt = 1;
     if (setsockopt(m_lfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
@@ -92,6 +86,13 @@ bool Server::Init(const unsigned short port)
         Close();
         return false;
     }
+
+    m_port = port;
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(m_port);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     if (bind(m_lfd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
     {
