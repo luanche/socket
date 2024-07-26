@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
                 server.Send(fd, message);
                 std::cout << "send to client " << fd << ": " << message << std::endl; });
 
-  server.Start(IOType::Select);
+  server.Start(IOType::Epoll);
 
   server.Close();
   return 0;

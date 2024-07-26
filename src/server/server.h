@@ -28,7 +28,12 @@ private:
     CallbackType onMessage;
     CallbackType onClose;
 
+    int _Accept(std::string &ip);
+    int _Receive(const int &fd, std::string &message);
+
     bool _StartSelect();
+    bool _StartPoll();
+    bool _StartEpoll();
 
 public:
     Server() : m_lfd(-1), onConnect(nullptr), onMessage(nullptr), onClose(nullptr) {};

@@ -7,9 +7,52 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <sys/poll.h>
+#include <sys/epoll.h>
 #include "server.h"
 
 #define MESSAGE_MAX_LENGTH 1024
+#define FD_LIST_SIZE 1024
+
+int Server::_Accept(std::string &ip)
+{
+    struct sockaddr_in addr;
+    socklen_t length = sizeof(addr);
+    int fd = accept(m_lfd, (struct sockaddr *)&addr, &length);
+    ip = inet_ntoa(addr.sin_addr);
+    if (onConnect)
+    {
+        onConnect(fd, ip);
+    }
+    return fd;
+}
+
+int Server::_Receive(const int &fd, std::string &message)
+{
+    message.clear();
+    message.resize(MESSAGE_MAX_LENGTH);
+    int size = recv(fd, &message[0], message.size(), 0);
+    if (size == 0)
+    {
+        if (onClose)
+        {
+            onClose(fd, message);
+        }
+        close(fd);
+    }
+    else if (size > 0)
+    {
+        if (onMessage)
+        {
+            onMessage(fd, message);
+        }
+    }
+    else
+    {
+        perror("recv");
+    }
+    return size;
+}
 
 bool Server::_StartSelect()
 {
@@ -25,50 +68,120 @@ bool Server::_StartSelect()
         int num = select(max_fd + 1, &temp_set, NULL, NULL, NULL);
         if (FD_ISSET(m_lfd, &temp_set))
         {
-            struct sockaddr_in addr;
-            socklen_t length = sizeof(addr);
-            int client_fd = accept(m_lfd, (struct sockaddr *)&addr, &length);
+            int client_fd = _Accept(message);
             FD_SET(client_fd, &read_set);
-            message = inet_ntoa(addr.sin_addr);
             if (client_fd > max_fd)
             {
                 max_fd = client_fd;
             }
-            if (onConnect)
-            {
-                onConnect(client_fd, message);
-            }
         }
-        for (int fd = 0; fd <= max_fd; fd++)
+        for (int fd = 0; fd <= max_fd; ++fd)
         {
             if (fd != m_lfd && FD_ISSET(fd, &temp_set))
             {
-                message.clear();
-                message.resize(MESSAGE_MAX_LENGTH);
-                int size = recv(fd, &message[0], message.size(), 0);
+                int size = _Receive(fd, message);
                 if (size == 0)
                 {
                     FD_CLR(fd, &read_set);
-                    close(fd);
-                    if (onClose)
-                    {
-                        onClose(fd, message);
-                    }
-                }
-                else if (size > 0)
-                {
-                    if (onMessage)
-                    {
-                        onMessage(fd, message);
-                    }
-                }
-                else
-                {
-                    perror("recv");
                 }
             }
         }
     }
+    return true;
+}
+
+bool Server::_StartPoll()
+{
+
+    struct pollfd fds[FD_LIST_SIZE];
+    for (int i = 0; i < FD_LIST_SIZE; ++i)
+    {
+        fds[i].fd = -1;
+        fds[i].events = POLLIN;
+    }
+    fds[0].fd = m_lfd;
+    int max_index = 0;
+    std::string message;
+    while (1)
+    {
+        int num = poll(fds, max_index + 1, -1);
+        if (fds[0].revents & POLLIN)
+        {
+            int client_fd = _Accept(message);
+            for (int i = 0; i < FD_LIST_SIZE; ++i)
+            {
+                if (fds[i].fd == -1)
+                {
+                    fds[i].fd = client_fd;
+                    if (i > max_index)
+                    {
+                        max_index = i;
+                    }
+                    break;
+                }
+            }
+        }
+        for (int i = 1; i <= max_index; ++i)
+        {
+            if (fds[i].revents & POLLIN)
+            {
+                int size = _Receive(fds[i].fd, message);
+                if (size == 0)
+                {
+                    fds[i].fd = -1;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+bool Server::_StartEpoll()
+{
+    int epoll_fd = epoll_create(1);
+    if (epoll_fd < 0)
+    {
+        perror("epoll_create");
+        return false;
+    }
+    struct epoll_event ev;
+    ev.events = EPOLLIN;
+    ev.data.fd = m_lfd;
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, m_lfd, &ev) < 0)
+    {
+        perror("epoll_ctl");
+        return false;
+    }
+    struct epoll_event evs[FD_LIST_SIZE];
+    std::string message;
+    while (1)
+    {
+        int num = epoll_wait(epoll_fd, evs, FD_LIST_SIZE, -1);
+        for (int i = 0; i < num; ++i)
+        {
+            int fd = evs[i].data.fd;
+            if (fd == m_lfd)
+            {
+                int client_fd = _Accept(message);
+                ev.events = EPOLLIN;
+                ev.data.fd = client_fd;
+                if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &ev) < 0)
+                {
+                    perror("epoll_ctl");
+                }
+            }
+            else
+            {
+                int size = _Receive(fd, message);
+                if (size == 0)
+                {
+                    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, NULL);
+                }
+            }
+        }
+    }
+
+    return true;
 }
 
 bool Server::Init(const unsigned short port)
@@ -130,8 +243,11 @@ bool Server::Start(const IOType &type)
     switch (type)
     {
     case IOType::Select:
-        _StartSelect();
-        return true;
+        return _StartSelect();
+    case IOType::Poll:
+        return _StartPoll();
+    case IOType::Epoll:
+        return _StartEpoll();
     default:
         return false;
     }
