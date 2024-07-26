@@ -12,30 +12,30 @@ int main(int argc, char *argv[])
   Client client;
   if (!client.Connect(argv[1], atoi(argv[2])))
   {
-    std::perror("connect error");
+    std::perror("connect");
     return -1;
   }
-  std::cout << "connected\n";
+  std::cout << "connected to " << argv[1] << " " << argv[2] << std::endl;
   std::string message;
   while (1)
   {
     std::cout << "send to server: ";
     std::getline(std::cin, message);
-    if (message.compare("done") == 0)
+    if (message == "")
     {
       break;
     }
     if (!client.Send(message))
     {
-      std::perror("send error");
+      std::perror("send");
       break;
     }
     if (!client.Receive(message, 1024))
     {
-      std::perror("receive error");
+      std::perror("receive");
       break;
     }
-    std::cout << "receive from server: " << message << std::endl;
+    std::cout << "received from server: " << message << std::endl;
   }
   client.Close();
   return 0;

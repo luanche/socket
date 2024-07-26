@@ -37,9 +37,14 @@ private:
 
 public:
     Server() : m_lfd(-1), onConnect(nullptr), onMessage(nullptr), onClose(nullptr) {};
+
+    const int GetFD();
+    const unsigned short GetPort();
+
     bool Init(const unsigned short port);
     bool Bind(const EventType &event, CallbackType);
     bool Start(const IOType &type);
+
     bool Send(const int &fd, const std::string &message);
     bool Close();
     ~Server() { Close(); };

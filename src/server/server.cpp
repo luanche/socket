@@ -49,7 +49,7 @@ int Server::_Receive(const int &fd, std::string &message)
     }
     else
     {
-        perror("recv");
+        std::perror("recv");
     }
     return size;
 }
@@ -141,7 +141,7 @@ bool Server::_StartEpoll()
     int epoll_fd = epoll_create(1);
     if (epoll_fd < 0)
     {
-        perror("epoll_create");
+        std::perror("epoll_create");
         return false;
     }
     struct epoll_event ev;
@@ -149,7 +149,7 @@ bool Server::_StartEpoll()
     ev.data.fd = m_lfd;
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, m_lfd, &ev) < 0)
     {
-        perror("epoll_ctl");
+        std::perror("epoll_ctl");
         return false;
     }
     struct epoll_event evs[FD_LIST_SIZE];
@@ -184,12 +184,23 @@ bool Server::_StartEpoll()
     return true;
 }
 
+const int Server::GetFD()
+{
+    return m_lfd;
+}
+
+const unsigned short Server::GetPort()
+{
+    return m_port;
+}
+
 bool Server::Init(const unsigned short port)
 {
     if (m_lfd != -1)
         return false;
     if ((m_lfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
+        std::perror("socket");
         return false;
     }
 
@@ -197,6 +208,7 @@ bool Server::Init(const unsigned short port)
     if (setsockopt(m_lfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
     {
         Close();
+        std::perror("setsockopt");
         return false;
     }
 
@@ -210,11 +222,13 @@ bool Server::Init(const unsigned short port)
     if (bind(m_lfd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
     {
         Close();
+        std::perror("bind");
         return false;
     }
     if (listen(m_lfd, 10) < 0)
     {
         Close();
+        std::perror("listen");
         return false;
     }
     return true;
