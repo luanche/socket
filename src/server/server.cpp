@@ -11,9 +11,6 @@
 #include <sys/epoll.h>
 #include "server.h"
 
-#define MESSAGE_MAX_LENGTH 1024
-#define FD_LIST_SIZE 1024
-
 int Server::_Accept(std::string &ip)
 {
     struct sockaddr_in addr;

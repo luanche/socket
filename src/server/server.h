@@ -35,6 +35,9 @@ private:
     bool _StartPoll();
     bool _StartEpoll();
 
+    static const int MESSAGE_MAX_LENGTH = 1024;
+    static const int FD_LIST_SIZE = 1024;
+
 public:
     Server() : m_lfd(-1), onConnect(nullptr), onMessage(nullptr), onClose(nullptr) {};
 
