@@ -5,14 +5,14 @@
 
 using CallbackType = std::function<void(const int &, std::string &)>;
 
-enum EventType
+enum class EventType
 {
     OnConnect,
     OnMessage,
     OnClose,
 };
 
-enum IOType
+enum class IOType
 {
     Select,
     Poll,
